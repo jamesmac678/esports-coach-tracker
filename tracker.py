@@ -4,19 +4,15 @@ import requests
 import time
 from datetime import datetime, timedelta
 
-# 1. Grab our secret keys from GitHub Actions
 DISCORD_WEBHOOK = os.environ.get("DISCORD_WEBHOOK")
 PANDASCORE_API = os.environ.get("PANDASCORE_API_KEY")
 
-# 2. Figure out the time windows
 now = datetime.utcnow()
 yesterday = now - timedelta(days=1)
 pandascore_start = yesterday.strftime('%Y-%m-%dT%H:%M:%SZ')
 liquipedia_start = yesterday.strftime('%Y-%m-%d %H:%M:%S')
 
-# 3. Route Mapping: Tell the script which API to use for which game
 PANDASCORE_GAMES = ['league-of-legends', 'valorant', 'csgo', 'dota-2', 'rocket-league']
-
 LIQUIPEDIA_WIKIS = {
     'pubg': 'pubg',
     'free-fire': 'freefire',
@@ -40,25 +36,48 @@ def check_matches():
         game = client['game']
         team_slug = client['team_slug']
         
-        # --- PANDASCORE LOGIC (Major Titles) ---
+        # --- PANDASCORE LOGIC ---
         if game in PANDASCORE_GAMES:
-            url = f"https://api.pandascore.co/teams/{team_slug}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
             headers = {"Authorization": f"Bearer {PANDASCORE_API}"}
+            search_name = team_slug.replace('-', ' ')
+            team_url = f"https://api.pandascore.co/{game}/teams?search[name]={search_name}"
             
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                for match in response.json():
-                    match_name = match.get('name', 'Unknown Match')
-                    updates.append(f"🚨 **{coach}'s Update ({game.upper()}):** {match_name} has finished.")
-                    
-        # --- LIQUIPEDIA LOGIC (Minor Titles) ---
+            team_response = requests.get(team_url, headers=headers)
+            if team_response.status_code == 200 and team_response.json():
+                actual_team_id = team_response.json()[0]['id']
+                
+                url = f"https://api.pandascore.co/teams/{actual_team_id}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+                response = requests.get(url, headers=headers)
+                
+                if response.status_code == 200:
+                    for match in response.json():
+                        match_name = match.get('name', 'Unknown Match')
+                        winner_id = match.get('winner_id')
+                        results = match.get('results', [])
+                        
+                        our_score = 0
+                        their_score = 0
+                        for r in results:
+                            if r.get('team_id') == actual_team_id:
+                                our_score = r.get('score', 0)
+                            else:
+                                their_score = r.get('score', 0)
+                        
+                        scoreline = f"({our_score}-{their_score})"
+                        
+                        if winner_id == actual_team_id:
+                            outcome = f"🟢 **WIN {scoreline}**"
+                        elif winner_id is None:
+                            outcome = f"⚪ **DRAW {scoreline}**"
+                        else:
+                            outcome = f"🔴 **LOSS {scoreline}**"
+                            
+                        updates.append(f"{outcome} | **{coach}'s Update ({game.upper()}):** {match_name}")
+                        
+        # --- LIQUIPEDIA LOGIC ---
         elif game in LIQUIPEDIA_WIKIS:
             wiki = LIQUIPEDIA_WIKIS[game]
-            
-            # Liquipedia requires Title Case with spaces (e.g., "team-vitality" -> "Team Vitality")
             liquipedia_team = team_slug.replace('-', ' ').title()
-            
-            # SAFETY FEATURE: Sleep for 2 seconds to respect Liquipedia's strict rate limits
             time.sleep(2)
             
             url = f"https://liquipedia.net/{wiki}/api.php"
@@ -66,14 +85,11 @@ def check_matches():
                 "action": "cargoquery",
                 "format": "json",
                 "tables": "Match2",
-                "fields": "match2id, tournament",
+                "fields": "match2id, tournament, opponent1, opponent2, winner, result1, result2",
                 "where": f"(opponent1='{liquipedia_team}' OR opponent2='{liquipedia_team}') AND dateexact >= '{liquipedia_start}'",
                 "limit": "5"
             }
-            # SAFETY FEATURE: Liquipedia blocks scripts without a User-Agent
-            headers = {
-                "User-Agent": "EsportsCoachTracker/1.0 (Automated Discord Alerts)"
-            }
+            headers = {"User-Agent": "EsportsCoachTracker/1.0 (Automated Discord Alerts)"}
             
             try:
                 response = requests.get(url, params=params, headers=headers)
@@ -81,12 +97,32 @@ def check_matches():
                     data = response.json()
                     if 'cargoquery' in data:
                         for item in data['cargoquery']:
-                            tourney = item['title'].get('tournament', 'an EWC Qualifier event')
-                            updates.append(f"🚨 **{coach}'s Update ({game.upper()}):** A match at {tourney} has finished.")
+                            title_data = item['title']
+                            tourney = title_data.get('tournament', 'EWC Qualifier')
+                            opp1 = title_data.get('opponent1', '')
+                            opp2 = title_data.get('opponent2', '')
+                            winner_num = title_data.get('winner', '')
+                            res1 = title_data.get('result1', '0') or '0'
+                            res2 = title_data.get('result2', '0') or '0'
+
+                            if opp1 == liquipedia_team:
+                                our_score, their_score = res1, res2
+                            else:
+                                our_score, their_score = res2, res1
+                                
+                            scoreline = f"({our_score}-{their_score})"
+
+                            if (winner_num == '1' and opp1 == liquipedia_team) or (winner_num == '2' and opp2 == liquipedia_team):
+                                outcome = f"🟢 **WIN {scoreline}**"
+                            elif winner_num == '0' or not winner_num:
+                                outcome = f"⚪ **DRAW {scoreline}**"
+                            else:
+                                outcome = f"🔴 **LOSS {scoreline}**"
+
+                            updates.append(f"{outcome} | **{coach}'s Update ({game.upper()}):** {tourney}")
             except Exception as e:
                 print(f"Failed to pull Liquipedia data for {coach}: {e}")
 
-    # Send the final daily digest
     if updates:
         final_message = "### 📊 Daily Coach Tracker Digest\n" + "\n".join(updates)
         send_discord_message(final_message)

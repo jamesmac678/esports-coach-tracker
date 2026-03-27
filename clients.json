@@ -1,7 +1,47 @@
 [
   {
-    "coach_name": "Alex",
+    "coach_name": "Bambino",
+    "game": "valorant",
+    "team_slug": "fut-esports"
+  },
+  {
+    "coach_name": "PAL",
+    "game": "valorant",
+    "team_slug": "team-vitality"
+  },
+  {
+    "coach_name": "Pad",
     "game": "league-of-legends",
+    "team_slug": "team-vitality"
+  },
+  {
+    "coach_name": "Kent",
+    "game": "pubg",
+    "team_slug": "bigetron"
+  },
+  {
+    "coach_name": "Chrisjo",
+    "game": "free-fire",
+    "team_slug": "bigetron"
+  },
+  {
+    "coach_name": "Strey",
+    "game": "crossfire",
+    "team_slug": "team-vitality"
+  },
+  {
+    "coach_name": "Ebatez",
+    "game": "call-of-duty-warzone",
+    "team_slug": "team-vitality"
+  },
+  {
+    "coach_name": "Apex",
+    "game": "csgo",
+    "team_slug": "team-vitality"
+  },
+  {
+    "coach_name": "PAC",
+    "game": "trackmania",
     "team_slug": "team-vitality"
   }
 ]

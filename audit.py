@@ -43,20 +43,32 @@ def run_audit():
         game = client['game']
         team_slug = client['team_slug']
         
-        # --- PANDASCORE LOGIC ---
+        # --- PANDASCORE LOGIC (Auto-Discovery Upgrade) ---
         if game in PANDASCORE_GAMES:
-            url = f"https://api.pandascore.co/teams/{team_slug}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
             headers = {"Authorization": f"Bearer {PANDASCORE_API}"}
             
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                for match in response.json():
-                    match_name = match.get('name', 'Unknown Match')
-                    date = match.get('end_at', '')[:10]
-                    audit_log.append(f"✅ `{date}` | **{coach} ({game.upper()}):** {match_name}")
+            # Step 1: Search the specific game's database for the team name
+            search_name = team_slug.replace('-', ' ')
+            team_url = f"https://api.pandascore.co/{game}/teams?search[name]={search_name}"
+            
+            team_response = requests.get(team_url, headers=headers)
+            if team_response.status_code == 200 and team_response.json():
+                # Grab the exact internal ID for this specific roster
+                actual_team_id = team_response.json()[0]['id']
+                
+                # Step 2: Ask for matches using that exact internal ID
+                url = f"https://api.pandascore.co/teams/{actual_team_id}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+                
+                response = requests.get(url, headers=headers)
+                if response.status_code == 200:
+                    for match in response.json():
+                        match_name = match.get('name', 'Unknown Match')
+                        date = match.get('end_at', '')[:10]
+                        audit_log.append(f"✅ `{date}` | **{coach} ({game.upper()}):** {match_name}")
+                else:
+                    print(f"❌ PandaScore Match Error for {coach} ({game}): {response.status_code} - {response.text}")
             else:
-                # NEW: Print exactly why PandaScore failed
-                print(f"❌ PandaScore Error for {coach} ({game}): {response.status_code} - {response.text}")
+                print(f"❌ PandaScore Auto-Discovery Failed for {coach} ({game}): Could not find '{search_name}'")
                     
         # --- LIQUIPEDIA LOGIC ---
         elif game in LIQUIPEDIA_WIKIS:
@@ -88,7 +100,6 @@ def run_audit():
                             date = item['title'].get('date', '')[:10]
                             audit_log.append(f"✅ `{date}` | **{coach} ({game.upper()}):** {tourney}")
                 else:
-                    # NEW: Print exactly why Liquipedia failed
                     print(f"❌ Liquipedia Error for {coach} ({game}): {response.status_code} - {response.text}")
             except Exception as e:
                 print(f"Failed to pull Liquipedia data for {coach}: {e}")

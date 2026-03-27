@@ -43,10 +43,5 @@
     "coach_name": "PAC",
     "game": "trackmania",
     "team_slug": "team-vitality"
-  },
-  {
-    "coach_name": "Test Run",
-    "game": "dota-2",
-    "team_slug": "tundra-esports"
   }
 ]

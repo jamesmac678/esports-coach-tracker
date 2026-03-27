@@ -1,0 +1,28 @@
+name: Fortnightly Audit
+
+on:
+  schedule:
+    - cron: '0 8 * * 1' # Runs at 08:00 UTC every Monday
+  workflow_dispatch:
+
+jobs:
+  run-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Requirements
+        run: pip install -r requirements.txt
+
+      - name: Run Audit Script
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          PANDASCORE_API_KEY: ${{ secrets.PANDASCORE_API_KEY }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: python audit.py

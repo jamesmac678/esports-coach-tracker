@@ -5,20 +5,22 @@ import time
 from datetime import datetime, timedelta
 
 DISCORD_WEBHOOK = os.environ.get("DISCORD_WEBHOOK")
-PANDASCORE_API = os.environ.get("PANDASCORE_API_KEY")
 
 now = datetime.utcnow()
 yesterday = now - timedelta(days=1)
-pandascore_start = yesterday.strftime('%Y-%m-%dT%H:%M:%SZ')
 liquipedia_start = yesterday.strftime('%Y-%m-%d %H:%M:%S')
 
-PANDASCORE_GAMES = ['league-of-legends', 'valorant', 'csgo', 'dota-2', 'rocket-league']
-LIQUIPEDIA_WIKIS_1V1 = {'crossfire': 'crossfire'}
-LIQUIPEDIA_WIKIS_FFA = {
-    'pubg': 'pubg',
-    'free-fire': 'freefire',
-    'call-of-duty-warzone': 'callofduty',
-    'trackmania': 'trackmania'
+WIKI_MAP = {
+    'league-of-legends': ('leagueoflegends', '1v1'),
+    'valorant': ('valorant', '1v1'),
+    'csgo': ('counterstrike', '1v1'),
+    'dota-2': ('dota2', '1v1'),
+    'rocket-league': ('rocketleague', '1v1'),
+    'crossfire': ('crossfire', '1v1'),
+    'pubg': ('pubg', 'ffa'),
+    'free-fire': ('freefire', 'ffa'),
+    'call-of-duty-warzone': ('callofduty', 'ffa'),
+    'trackmania': ('trackmania', 'ffa')
 }
 
 def send_discord_message(message):
@@ -36,52 +38,15 @@ def check_matches():
         game = client['game']
         team_slug = client['team_slug']
         
-        # --- PANDASCORE LOGIC (PROPER REST FILTERING) ---
-        if game in PANDASCORE_GAMES:
-            headers = {"Authorization": f"Bearer {PANDASCORE_API}"}
-            team_url = f"https://api.pandascore.co/{game}/teams"
-            params = {"filter[slug]": team_slug}
+        if game not in WIKI_MAP:
+            continue
             
-            team_response = requests.get(team_url, headers=headers, params=params)
-            actual_team_id = None
-            
-            if team_response.status_code == 200 and team_response.json():
-                actual_team_id = team_response.json()[0]['id']
-            
-            if actual_team_id:
-                url = f"https://api.pandascore.co/teams/{actual_team_id}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-                response = requests.get(url, headers=headers)
-                
-                if response.status_code == 200:
-                    for match in response.json():
-                        match_name = match.get('name', 'Unknown Match')
-                        winner_id = match.get('winner_id')
-                        results = match.get('results', [])
-                        
-                        our_score, their_score = 0, 0
-                        for r in results:
-                            if r.get('team_id') == actual_team_id:
-                                our_score = r.get('score', 0)
-                            else:
-                                their_score = r.get('score', 0)
-                                
-                        scoreline = f"({our_score}-{their_score})"
-                        
-                        if winner_id == actual_team_id:
-                            outcome = f"🟢 **WIN {scoreline}**"
-                        elif winner_id is None:
-                            outcome = f"⚪ **DRAW {scoreline}**"
-                        else:
-                            outcome = f"🔴 **LOSS {scoreline}**"
-                            
-                        updates.append(f"{outcome} | **{coach}'s Update ({game.upper()}):** {match_name}")
-                    
-        # --- LIQUIPEDIA LOGIC (1V1 GAMES) ---
-        elif game in LIQUIPEDIA_WIKIS_1V1:
-            wiki = LIQUIPEDIA_WIKIS_1V1[game]
+        wiki, match_type = WIKI_MAP[game]
+        time.sleep(2) # Safe 2-second brake for Liquipedia limits
+        
+        # --- 1v1 GAMES (LoL, CSGO, Valorant, etc.) ---
+        if match_type == '1v1':
             liquipedia_team = team_slug.replace('-', ' ').title()
-            time.sleep(2)
-            
             url = f"https://liquipedia.net/{wiki}/api.php"
             params = {
                 "action": "cargoquery", "format": "json", "tables": "Match2",
@@ -113,19 +78,15 @@ def check_matches():
 
                         updates.append(f"{outcome} | **{coach}'s Update ({game.upper()}):** {tourney}")
             except Exception as e:
-                print(f"Failed 1v1 Liquipedia for {coach}: {e}")
+                print(f"Failed Liquipedia pull for {coach}: {e}")
 
-        # --- LIQUIPEDIA LOGIC (FREE-FOR-ALL / BATTLE ROYALE) ---
-        elif game in LIQUIPEDIA_WIKIS_FFA:
-            wiki = LIQUIPEDIA_WIKIS_FFA[game]
-            liquipedia_participant = team_slug 
-            time.sleep(2)
-            
+        # --- FREE FOR ALL GAMES (PUBG, Trackmania, etc.) ---
+        elif match_type == 'ffa':
             url = f"https://liquipedia.net/{wiki}/api.php"
             params = {
                 "action": "cargoquery", "format": "json", "tables": "Placement",
                 "fields": "tournament, placement",
-                "where": f"participant='{liquipedia_participant}' AND date >= '{liquipedia_start}'",
+                "where": f"participant='{team_slug}' AND date >= '{liquipedia_start}'",
                 "limit": "5"
             }
             headers = {"User-Agent": "EsportsCoachTracker/1.0"}
@@ -147,11 +108,10 @@ def check_matches():
 
                         updates.append(f"{outcome} | **{coach}'s Update ({game.upper()}):** {tourney}")
             except Exception as e:
-                print(f"Failed FFA Liquipedia for {coach}: {e}")
+                print(f"Failed Liquipedia pull for {coach}: {e}")
 
     if updates:
-        final_message = "### 📊 Daily Coach Tracker Digest\n" + "\n".join(updates)
-        send_discord_message(final_message)
+        send_discord_message("### 📊 Daily Coach Tracker Digest\n" + "\n".join(updates))
     else:
         print("No new matches in the last 24 hours.")
 

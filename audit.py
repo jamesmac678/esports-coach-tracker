@@ -43,20 +43,19 @@ def run_audit():
         game = client['game']
         team_slug = client['team_slug']
         
-        # --- PANDASCORE LOGIC (GAME VERIFICATION FIX) ---
+        # --- PANDASCORE LOGIC (PROPER REST FILTERING) ---
         if game in PANDASCORE_GAMES:
             headers = {"Authorization": f"Bearer {PANDASCORE_API}"}
-            team_url = f"https://api.pandascore.co/teams?filter[slug]={team_slug}"
             
-            team_response = requests.get(team_url, headers=headers)
+            # The Fix: Use the correct endpoint and pass the slug safely as a query parameter
+            team_url = f"https://api.pandascore.co/{game}/teams"
+            params = {"filter[slug]": team_slug}
+            
+            team_response = requests.get(team_url, headers=headers, params=params)
             actual_team_id = None
             
-            if team_response.status_code == 200:
-                # Iterate through all teams sharing this slug to find the correct game
-                for t in team_response.json():
-                    if t.get('current_videogame', {}).get('slug') == game:
-                        actual_team_id = t['id']
-                        break
+            if team_response.status_code == 200 and team_response.json():
+                actual_team_id = team_response.json()[0]['id']
             
             if actual_team_id:
                 url = f"https://api.pandascore.co/teams/{actual_team_id}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
@@ -87,7 +86,7 @@ def run_audit():
                             
                         audit_log.append(f"{outcome} `{date}` | **{coach} ({game.upper()}):** {match_name}")
             else:
-                print(f"❌ PandaScore lookup failed for {coach} ({game}). Check the slug.")
+                print(f"❌ PandaScore lookup failed for {coach} ({game}). Double check the slug.")
                     
         # --- LIQUIPEDIA LOGIC (1V1 GAMES) ---
         elif game in LIQUIPEDIA_WIKIS_1V1:

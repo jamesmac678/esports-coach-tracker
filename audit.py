@@ -55,7 +55,7 @@ def run_audit():
         # --- 1v1 GAMES (LoL, CSGO, Valorant, etc.) ---
         if match_type == '1v1':
             # Auto-formats hyphenated slugs (e.g., 'team-vitality' -> 'Team Vitality')
-            liquipedia_team = team_slug.replace('-', ' ').title()
+            liquipedia_team = team_slug
             
             url = f"https://liquipedia.net/{wiki}/api.php"
             params = {

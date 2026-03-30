@@ -43,21 +43,19 @@ def run_audit():
         game = client['game']
         team_slug = client['team_slug']
         
-        # --- PANDASCORE LOGIC ---
+        # --- PANDASCORE LOGIC (FIXED) ---
         if game in PANDASCORE_GAMES:
             headers = {"Authorization": f"Bearer {PANDASCORE_API}"}
-            search_name = team_slug.replace('-', ' ')
-            team_url = f"https://api.pandascore.co/{game}/teams?search[name]={search_name}"
+            
+            # THE FIX: Ask PandaScore directly for the ID attached to this exact slug
+            team_url = f"https://api.pandascore.co/{game}/teams?filter[slug]={team_slug}"
             
             team_response = requests.get(team_url, headers=headers)
             actual_team_id = None
             
             if team_response.status_code == 200 and team_response.json():
-                # STRICT SLUG MATCH: Fixes the Vitality.Bee Academy Trap
-                for t in team_response.json():
-                    if t['slug'] == team_slug:
-                        actual_team_id = t['id']
-                        break
+                # Since we filtered by exact slug, the first result is guaranteed to be correct
+                actual_team_id = team_response.json()[0]['id']
             
             if actual_team_id:
                 url = f"https://api.pandascore.co/teams/{actual_team_id}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
@@ -88,7 +86,7 @@ def run_audit():
                             
                         audit_log.append(f"{outcome} `{date}` | **{coach} ({game.upper()}):** {match_name}")
             else:
-                print(f"❌ PandaScore strict match failed for {coach} ({game}) with slug '{team_slug}'")
+                print(f"❌ PandaScore exact slug match failed for {coach} ({game}) with slug '{team_slug}'")
                     
         # --- LIQUIPEDIA LOGIC (1V1 GAMES) ---
         elif game in LIQUIPEDIA_WIKIS_1V1:
@@ -133,7 +131,6 @@ def run_audit():
         # --- LIQUIPEDIA LOGIC (FREE-FOR-ALL / BATTLE ROYALE) ---
         elif game in LIQUIPEDIA_WIKIS_FFA:
             wiki = LIQUIPEDIA_WIKIS_FFA[game]
-            # Keeps the exact capitalization you put in clients.json (e.g. "Pac")
             liquipedia_participant = team_slug 
             time.sleep(2)
             
@@ -155,7 +152,6 @@ def run_audit():
                         date = t_data.get('date', '')[:10]
                         place = t_data.get('placement', 'N/A')
                         
-                        # Formatting the placement visually
                         if place == '1':
                             outcome = f"🟢 **1st**"
                         elif place in ['2', '3', '4']:

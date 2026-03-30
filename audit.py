@@ -18,10 +18,10 @@ pandascore_start = fortnight_ago.strftime('%Y-%m-%dT%H:%M:%SZ')
 liquipedia_start = fortnight_ago.strftime('%Y-%m-%d %H:%M:%S')
 
 PANDASCORE_GAMES = ['league-of-legends', 'valorant', 'csgo', 'dota-2', 'rocket-league']
-LIQUIPEDIA_WIKIS = {
+LIQUIPEDIA_WIKIS_1V1 = {'crossfire': 'crossfire'}
+LIQUIPEDIA_WIKIS_FFA = {
     'pubg': 'pubg',
     'free-fire': 'freefire',
-    'crossfire': 'crossfire',
     'call-of-duty-warzone': 'callofduty',
     'trackmania': 'trackmania'
 }
@@ -50,9 +50,16 @@ def run_audit():
             team_url = f"https://api.pandascore.co/{game}/teams?search[name]={search_name}"
             
             team_response = requests.get(team_url, headers=headers)
+            actual_team_id = None
+            
             if team_response.status_code == 200 and team_response.json():
-                actual_team_id = team_response.json()[0]['id']
-                
+                # STRICT SLUG MATCH: Fixes the Vitality.Bee Academy Trap
+                for t in team_response.json():
+                    if t['slug'] == team_slug:
+                        actual_team_id = t['id']
+                        break
+            
+            if actual_team_id:
                 url = f"https://api.pandascore.co/teams/{actual_team_id}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
                 response = requests.get(url, headers=headers)
                 
@@ -63,8 +70,7 @@ def run_audit():
                         winner_id = match.get('winner_id')
                         results = match.get('results', [])
                         
-                        our_score = 0
-                        their_score = 0
+                        our_score, their_score = 0, 0
                         for r in results:
                             if r.get('team_id') == actual_team_id:
                                 our_score = r.get('score', 0)
@@ -82,61 +88,87 @@ def run_audit():
                             
                         audit_log.append(f"{outcome} `{date}` | **{coach} ({game.upper()}):** {match_name}")
             else:
-                print(f"❌ PandaScore Auto-Discovery Failed for {coach} ({game})")
+                print(f"❌ PandaScore strict match failed for {coach} ({game}) with slug '{team_slug}'")
                     
-        # --- LIQUIPEDIA LOGIC ---
-        elif game in LIQUIPEDIA_WIKIS:
-            wiki = LIQUIPEDIA_WIKIS[game]
+        # --- LIQUIPEDIA LOGIC (1V1 GAMES) ---
+        elif game in LIQUIPEDIA_WIKIS_1V1:
+            wiki = LIQUIPEDIA_WIKIS_1V1[game]
             liquipedia_team = team_slug.replace('-', ' ').title()
             time.sleep(2)
             
             url = f"https://liquipedia.net/{wiki}/api.php"
             params = {
-                "action": "cargoquery",
-                "format": "json",
-                "tables": "Match2",
-                "fields": "match2id, tournament, date, opponent1, opponent2, winner, result1, result2",
+                "action": "cargoquery", "format": "json", "tables": "Match2",
+                "fields": "tournament, date, opponent1, opponent2, winner, result1, result2",
                 "where": f"(opponent1='{liquipedia_team}' OR opponent2='{liquipedia_team}') AND dateexact >= '{liquipedia_start}'",
                 "limit": "20"
             }
-            headers = {"User-Agent": "EsportsCoachTracker/1.0 (Automated Discord Alerts)"}
+            headers = {"User-Agent": "EsportsCoachTracker/1.0"}
             
             try:
                 response = requests.get(url, params=params, headers=headers)
-                if response.status_code == 200:
-                    data = response.json()
-                    if 'cargoquery' in data:
-                        for item in data['cargoquery']:
-                            title_data = item['title']
-                            tourney = title_data.get('tournament', 'EWC Qualifier')
-                            date = title_data.get('date', '')[:10]
-                            opp1 = title_data.get('opponent1', '')
-                            opp2 = title_data.get('opponent2', '')
-                            winner_num = title_data.get('winner', '')
-                            res1 = title_data.get('result1', '0') or '0'
-                            res2 = title_data.get('result2', '0') or '0'
+                if response.status_code == 200 and 'cargoquery' in response.json():
+                    for item in response.json()['cargoquery']:
+                        t_data = item['title']
+                        tourney = t_data.get('tournament', 'EWC Qualifier')
+                        date = t_data.get('date', '')[:10]
+                        opp1, opp2 = t_data.get('opponent1', ''), t_data.get('opponent2', '')
+                        win_num = t_data.get('winner', '')
+                        res1, res2 = t_data.get('result1', '0') or '0', t_data.get('result2', '0') or '0'
 
-                            if opp1 == liquipedia_team:
-                                our_score, their_score = res1, res2
-                            else:
-                                our_score, their_score = res2, res1
-                                
-                            scoreline = f"({our_score}-{their_score})"
+                        our_score, their_score = (res1, res2) if opp1 == liquipedia_team else (res2, res1)
+                        scoreline = f"({our_score}-{their_score})"
 
-                            if (winner_num == '1' and opp1 == liquipedia_team) or (winner_num == '2' and opp2 == liquipedia_team):
-                                outcome = f"🟢 {scoreline}"
-                            elif winner_num == '0' or not winner_num:
-                                outcome = f"⚪ {scoreline}"
-                            else:
-                                outcome = f"🔴 {scoreline}"
+                        if (win_num == '1' and opp1 == liquipedia_team) or (win_num == '2' and opp2 == liquipedia_team):
+                            outcome = f"🟢 {scoreline}"
+                        elif win_num == '0' or not win_num:
+                            outcome = f"⚪ {scoreline}"
+                        else:
+                            outcome = f"🔴 {scoreline}"
 
-                            audit_log.append(f"{outcome} `{date}` | **{coach} ({game.upper()}):** {tourney}")
+                        audit_log.append(f"{outcome} `{date}` | **{coach} ({game.upper()}):** {tourney}")
             except Exception as e:
-                print(f"Failed to pull Liquipedia data for {coach}: {e}")
+                print(f"Failed 1v1 Liquipedia for {coach}: {e}")
+
+        # --- LIQUIPEDIA LOGIC (FREE-FOR-ALL / BATTLE ROYALE) ---
+        elif game in LIQUIPEDIA_WIKIS_FFA:
+            wiki = LIQUIPEDIA_WIKIS_FFA[game]
+            # Keeps the exact capitalization you put in clients.json (e.g. "Pac")
+            liquipedia_participant = team_slug 
+            time.sleep(2)
+            
+            url = f"https://liquipedia.net/{wiki}/api.php"
+            params = {
+                "action": "cargoquery", "format": "json", "tables": "Placement",
+                "fields": "tournament, date, placement",
+                "where": f"participant='{liquipedia_participant}' AND date >= '{liquipedia_start}'",
+                "limit": "20"
+            }
+            headers = {"User-Agent": "EsportsCoachTracker/1.0"}
+            
+            try:
+                response = requests.get(url, params=params, headers=headers)
+                if response.status_code == 200 and 'cargoquery' in response.json():
+                    for item in response.json()['cargoquery']:
+                        t_data = item['title']
+                        tourney = t_data.get('tournament', 'EWC Qualifier')
+                        date = t_data.get('date', '')[:10]
+                        place = t_data.get('placement', 'N/A')
+                        
+                        # Formatting the placement visually
+                        if place == '1':
+                            outcome = f"🟢 **1st**"
+                        elif place in ['2', '3', '4']:
+                            outcome = f"⚪ **{place}th**"
+                        else:
+                            outcome = f"🔴 **{place}th**"
+
+                        audit_log.append(f"{outcome} `{date}` | **{coach} ({game.upper()}):** {tourney}")
+            except Exception as e:
+                print(f"Failed FFA Liquipedia for {coach}: {e}")
 
     if audit_log:
-        final_message = "### 📋 Fortnightly Coach Tracker Audit (Last 14 Days)\n" + "\n".join(audit_log)
-        send_discord_message(final_message)
+        send_discord_message("### 📋 Fortnightly Coach Tracker Audit (Last 14 Days)\n" + "\n".join(audit_log))
     else:
         send_discord_message("### 📋 Fortnightly Coach Tracker Audit\nNo matches found for any tracked teams in the last 14 days.")
 

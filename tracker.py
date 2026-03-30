@@ -46,7 +46,7 @@ def check_matches():
         
         # --- 1v1 GAMES (LoL, CSGO, Valorant, etc.) ---
         if match_type == '1v1':
-            liquipedia_team = team_slug.replace('-', ' ').title()
+            liquipedia_team = team_slug
             url = f"https://liquipedia.net/{wiki}/api.php"
             params = {
                 "action": "cargoquery", "format": "json", "tables": "Match2",

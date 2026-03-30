@@ -43,19 +43,23 @@ def run_audit():
         game = client['game']
         team_slug = client['team_slug']
         
-        # --- PANDASCORE LOGIC (FIXED) ---
+        # --- PANDASCORE LOGIC (DIRECT SLUG FETCH) ---
         if game in PANDASCORE_GAMES:
             headers = {"Authorization": f"Bearer {PANDASCORE_API}"}
             
-            # THE FIX: Ask PandaScore directly for the ID attached to this exact slug
-            team_url = f"https://api.pandascore.co/{game}/teams?filter[slug]={team_slug}"
+            # THE FIX: Ask PandaScore's global database directly for the exact slug
+            team_url = f"https://api.pandascore.co/teams/{team_slug}"
             
             team_response = requests.get(team_url, headers=headers)
             actual_team_id = None
             
-            if team_response.status_code == 200 and team_response.json():
-                # Since we filtered by exact slug, the first result is guaranteed to be correct
-                actual_team_id = team_response.json()[0]['id']
+            if team_response.status_code == 200:
+                team_data = team_response.json()
+                # Handle both dict and list responses to be perfectly safe
+                if isinstance(team_data, dict) and 'id' in team_data:
+                    actual_team_id = team_data['id']
+                elif isinstance(team_data, list) and len(team_data) > 0:
+                    actual_team_id = team_data[0]['id']
             
             if actual_team_id:
                 url = f"https://api.pandascore.co/teams/{actual_team_id}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
@@ -86,7 +90,7 @@ def run_audit():
                             
                         audit_log.append(f"{outcome} `{date}` | **{coach} ({game.upper()}):** {match_name}")
             else:
-                print(f"❌ PandaScore exact slug match failed for {coach} ({game}) with slug '{team_slug}'")
+                print(f"❌ PandaScore lookup failed for {coach} ({game}). Is '{team_slug}' the correct slug?")
                     
         # --- LIQUIPEDIA LOGIC (1V1 GAMES) ---
         elif game in LIQUIPEDIA_WIKIS_1V1:

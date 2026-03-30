@@ -36,20 +36,19 @@ def check_matches():
         game = client['game']
         team_slug = client['team_slug']
         
-        # --- PANDASCORE LOGIC (DIRECT SLUG FETCH) ---
+        # --- PANDASCORE LOGIC (GAME VERIFICATION FIX) ---
         if game in PANDASCORE_GAMES:
             headers = {"Authorization": f"Bearer {PANDASCORE_API}"}
-            team_url = f"https://api.pandascore.co/teams/{team_slug}"
+            team_url = f"https://api.pandascore.co/teams?filter[slug]={team_slug}"
             
             team_response = requests.get(team_url, headers=headers)
             actual_team_id = None
             
             if team_response.status_code == 200:
-                team_data = team_response.json()
-                if isinstance(team_data, dict) and 'id' in team_data:
-                    actual_team_id = team_data['id']
-                elif isinstance(team_data, list) and len(team_data) > 0:
-                    actual_team_id = team_data[0]['id']
+                for t in team_response.json():
+                    if t.get('current_videogame', {}).get('slug') == game:
+                        actual_team_id = t['id']
+                        break
             
             if actual_team_id:
                 url = f"https://api.pandascore.co/teams/{actual_team_id}/matches?filter[status]=finished&range[end_at]={pandascore_start},{now.strftime('%Y-%m-%dT%H:%M:%SZ')}"

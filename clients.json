@@ -1,18 +1,23 @@
 [
   {
-    "coach_name": "Bambino",
-    "game": "valorant",
-    "team_slug": "fut-esports"
-  },
-  {
-    "coach_name": "PAL",
-    "game": "valorant",
-    "team_slug": "team-vitality"
+    "coach_name": "Apex",
+    "game": "csgo",
+    "team_slug": "Team Vitality"
   },
   {
     "coach_name": "Pad",
     "game": "league-of-legends",
-    "team_slug": "team-vitality"
+    "team_slug": "Team Vitality"
+  },
+  {
+    "coach_name": "PAL",
+    "game": "valorant",
+    "team_slug": "Team Vitality"
+  },
+  {
+    "coach_name": "Bambino",
+    "game": "valorant",
+    "team_slug": "FUT Esports"
   },
   {
     "coach_name": "Kent",
@@ -25,19 +30,9 @@
     "team_slug": "Bigetron by Vitality"
   },
   {
-    "coach_name": "Strey",
-    "game": "crossfire",
-    "team_slug": "team-vitality"
-  },
-  {
     "coach_name": "Ebatez",
     "game": "call-of-duty-warzone",
     "team_slug": "Team Vitality"
-  },
-  {
-    "coach_name": "Apex",
-    "game": "csgo",
-    "team_slug": "vitality"
   },
   {
     "coach_name": "PAC",

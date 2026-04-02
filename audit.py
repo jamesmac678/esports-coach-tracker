@@ -83,6 +83,8 @@ def run_audit():
                             
                         audit_log.append(f"{outcome} `{date}` | **{coach} ({game.upper()}):** {match_name}")
             else:
+                print(f"status: {team_response.status_code}") 
+                print(team_response)
                 print(f"❌ PandaScore Auto-Discovery Failed for {coach} ({game})")
                     
         # --- LIQUIPEDIA LOGIC ---

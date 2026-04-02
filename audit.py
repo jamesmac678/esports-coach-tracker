@@ -27,6 +27,7 @@ LIQUIPEDIA_WIKIS = {
 }
 
 def send_discord_message(message):
+    print("sending discord message")
     if len(message) > 1990:
         message = message[:1990] + "\n...[List Truncated due to length]"
     data = {"content": message}

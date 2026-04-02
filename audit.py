@@ -52,7 +52,7 @@ def run_audit():
             #?search[name]={search_name}
             
             team_response = requests.get(team_url, headers=headers)
-            print(team_response.json)
+            print(team_response.json())
             if team_response.status_code == 200 and team_response.json():
                 actual_team_id = team_response.json()[0]['id']
                 

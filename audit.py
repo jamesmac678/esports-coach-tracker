@@ -48,8 +48,8 @@ def run_audit():
         if game in PANDASCORE_GAMES:
             headers = {"Authorization": f"Bearer {PANDASCORE_API}"}
             search_name = team_slug.replace('-', ' ')
-            team_url = f"https://api.pandascore.co/{game}/teams
-            #?search[name]={search_name}"
+            team_url = f"https://api.pandascore.co/{game}/teams"
+            #?search[name]={search_name}
             
             team_response = requests.get(team_url, headers=headers)
             print(team_response)
